@@ -6,6 +6,7 @@ require 'net/http'
 require 'socket'
 
 class Wego
+
   IconUnknown = [
     "    .-.      ",
     "     __)     ",
@@ -196,10 +197,11 @@ class Wego
 
   class CannotGetData < StandardError; end
 
-  def initialize(location, days = '3')
+  def initialize(location, days)
     @params = {}
     @params['q'] = location
-    @params['num_of_days'] = days
+    @params['num_of_days'] = days.to_i
+    @params['tp'] = 12;
     @params['key'] = APIKey
     @params['format'] = 'json'
     @params['lang'] = 'zh'
@@ -213,106 +215,128 @@ class Wego
     raise CannotGetData, @data['error'][0]['msg'] if @data['error']
   end
 
-
-  def format_temp(cond)
-    def color(temp)
-      col = case temp
-        when -Float::INFINITY..-16; 21
-        when -15..-13; 27
-        when -12..-10; 33
-        when -9..-7; 39
-        when -6..-4; 45
-        when -3..-1; 51
-        when 0..1; 50
-        when 2..3; 49
-        when 4..5; 48
-        when 6..7; 47
-        when 8..9; 46
-        when 10..12; 82
-        when 13..15; 118
-        when 16..18; 154
-        when 19..21; 190
-        when 22..24; 226
-        when 25..27; 220
-        when 28..30; 214
-        when 31..33; 208
-        when 34..36; 202
-        when 37..Float::INFINITY; 196
-      end
-      "\033[38;5;#{col}m#{temp}\033[0m"
-    end
-    temps = [cond['temp_C'].to_i, cond['FeelsLikeC'].to_i].sort
-    "#{color(temps[0])} - #{color(temps[1])} °C"
-  end
-
-  def format_rain(cond, current)
-    if current
-      "降水量：#{cond['precipMM']} mm"
-    else
-      "降水概率：#{cond['chanceofrain']}%"
-    end
-  end
-
-  def format_humi(cond)
-    "湿度：#{cond['humidity']}%"
-  end
-
-  def format_wind(cond)
-    def color(speed)
-      col = case speed
-        when 1..3; 82
-        when 4..6; 118
-        when 7..9; 154
-        when 10..12; 190
-        when 13..15; 226
-        when 16..19; 220
-        when 20..23; 214
-        when 24..27; 208
-        when 28..31; 202
-        when 32..Float::INFINITY; 196
-        else 46
-      end
-      "\033[38;5;#{col}m#{speed}\033[0m"
-    end
-    dir, speed = cond['winddir16Point'], cond['windspeedKmph'].to_i
-    "#{WindDir[dir]} #{color speed} km/h"
-  end
-
   def format_current
     cond = @data['current_condition'][0]
-    icon = Codes[cond['weatherCode'].to_i]
-    icon ||= IconUnknown
-    desc = cond['lang_zh'][0]['value']
-    s  = "#{icon[0]} #{desc}\t\t│\n"
-    s += "#{icon[1]} #{format_temp cond}\t│\n"
-    s += "#{icon[2]} #{format_rain cond, true }\t│\n"
-    s += "#{icon[3]} #{format_humi cond}\t\t│\n"
-    s += "#{icon[4]} #{format_wind cond}\t\t│\n"
+    format_cond(cond, true).join("\n")
   end
 
   def format_day(day)
-
+    hourly = @data['weather'][day]['hourly']
+    date = @data['weather'][day]['date']
+    "                         ┌────────────┐                         \n" +
+    "┌────────────────────────| "+ date +" |─────────────────────────┐\n" +
+    "│             白天       └──────┬─────┘       夜间              │\n" +
+    "├───────────────────────────────┼───────────────────────────────┤\n" +
+    (0..4).map{|i| "|#{format_cond(hourly[0])[i]}|#{format_cond(hourly[1])[i]}|\n"}.join +
+    "└───────────────────────────────┴───────────────────────────────┘"
   end
 
   def to_s
-    s = '当前天气信息：'
-    s += @data['request'][0]['query'] if @data['request'][0]['type'] == 'City'
-    s += "\n\n"
-    s += format_current
-    s += "\n"
+    "当前天气信息：#{@data['request'][0]['query'] if @data['request'][0]['type'] == 'City'}\n\n" +
+    "#{format_current}\n" +
+    (0...@params['num_of_days']).map{|i| format_day(i)}.join("\n")
   end
+
+  private
+
+    def format_temp(cond, current)
+      def color(temp)
+        col = case temp
+          when -Float::INFINITY..-16; 21
+          when -15..-13; 27
+          when -12..-10; 33
+          when -9..-7; 39
+          when -6..-4; 45
+          when -3..-1; 51
+          when 0..1; 50
+          when 2..3; 49
+          when 4..5; 48
+          when 6..7; 47
+          when 8..9; 46
+          when 10..12; 82
+          when 13..15; 118
+          when 16..18; 154
+          when 19..21; 190
+          when 22..24; 226
+          when 25..27; 220
+          when 28..30; 214
+          when 31..33; 208
+          when 34..36; 202
+          when 37..Float::INFINITY; 196
+        end
+        "\033[38;5;#{col}m#{temp}\033[0m"
+      end
+      tempC = current ? cond['temp_C'] : cond['tempC']
+      temps = [tempC.to_i, cond['FeelsLikeC'].to_i].sort
+      "#{color(temps[0])} - #{color(temps[1])} °C" +
+      (tempC.size + cond['FeelsLikeC'].size < 4 ? "\t\t" : "\t")
+    end
+
+    def format_rain(cond, current)
+      if current
+        "降水量：#{cond['precipMM']} mm\t"
+      else
+        "降水概率：#{cond['chanceofrain']}%\t"
+      end
+    end
+
+    def format_humi(cond)
+      "湿度：#{cond['humidity']}%\t\t"
+    end
+
+    def format_wind(cond)
+      def color(speed)
+        col = case speed
+          when 1..3; 82
+          when 4..6; 118
+          when 7..9; 154
+          when 10..12; 190
+          when 13..15; 226
+          when 16..19; 220
+          when 20..23; 214
+          when 24..27; 208
+          when 28..31; 202
+          when 32..Float::INFINITY; 196
+          else 46
+        end
+        "\033[38;5;#{col}m#{speed}\033[0m"
+      end
+      dir, speed = cond['winddir16Point'], cond['windspeedKmph'].to_i
+      "#{WindDir[dir]} #{color speed} km/h\t\t"
+    end
+
+    def format_cond(cond, current = false)
+      icon = Codes[cond['weatherCode'].to_i]
+      icon ||= IconUnknown
+      desc = cond['lang_zh'][0]['value'] + "\t"
+      desc += "\t" if desc.size <= 5
+      [ "#{icon[0]}#{desc}",
+        "#{icon[1]}#{format_temp cond, current}",
+        "#{icon[2]}#{format_rain cond, current }",
+        "#{icon[3]}#{format_humi cond}",
+        "#{icon[4]}#{format_wind cond}"
+      ]
+    end
+
 end
 
 if __FILE__ == $0
   begin
-    if ARGV.size == 0
+    location, days = nil, 2
+    ARGV.each do |arg|
+      if arg =~ /[^\d]/
+        location = arg
+      else
+        days = arg.to_i
+      end
+    end
+    if location.nil?
+      print "未指定城市，尝试使用 IP 查询："
       public_ip = Net::HTTP.get(URI.parse('https://api.ipify.org'))
-      puts "未指定城市，尝试使用 IP 查询：#{public_ip}"
-      wego = Wego.new(public_ip)
-    elsif ARGV.size == 1
-      wego = Wego.new(ARGV[0])
-    elsif ARGV.size == 2
-      wego = Wego.new(ARGV[0], ARGV[1])
+      puts public_ip
+      wego = Wego.new(public_ip, days)
+    else
+      wego = Wego.new(location, days)
     end
     wego.get
     puts wego
