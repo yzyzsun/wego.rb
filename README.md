@@ -4,7 +4,9 @@ wego.rb 是用 Ruby 编写的终端天气查询应用，天气数据由 [World W
 
 基于 Go 语言项目 [schachmat/wego](https://github.com/schachmat/wego) 改写，遵循其 [LICENSE](https://github.com/schachmat/wego/blob/master/LICENSE)。
 
-## 使用
+![](https://github.com/yzyzsun/wego.rb/raw/master/screenshot.png)
+
+## 用法
 
 * `ruby wego.rb [城市] [查询天数]`
 * 城市名请使用英文，亦可使用国名（返回首都天气）和 IP。若名称中需要包含空格，请加上引号。
