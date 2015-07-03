@@ -198,7 +198,10 @@ class Wego
   class CannotGetData < StandardError; end
 
   def initialize(location, days)
-    raise WrongNumOfDays if days < 0 || days > 5
+    if days > 5
+      puts "最多查询天数为 5"
+      days = 5
+    end
     @params = {}
     @params['q'] = location
     @params['num_of_days'] = days.to_i
@@ -343,8 +346,6 @@ if __FILE__ == $0
     puts wego
   rescue SocketError
     puts "\033[31m错误：请检查网络连接\033[0m"
-  rescue Wego::WrongNumOfDays
-    puts "\033[31m错误：查询天数范围只能为 0 - 5\033[0m"
   rescue Wego::CannotGetData
     puts "\033[31m错误：未找到指定的城市或 IP\033[0m"
   end
