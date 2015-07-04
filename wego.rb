@@ -191,17 +191,15 @@ class Wego
     "NNW" => "\033[1m↘\033[0m",
   }
 
-  APIBaseURL = 'https://api.worldweatheronline.com/free/v2/weather.ashx'
   APIKey = 'f6d8a7f33686c57b00315e785aa35'
+  APIBaseURL = 'https://api.worldweatheronline.com/free/v2/weather.ashx'
+  IPQueryURL = 'https://api.ipify.org'
 
+  class WrongLocation < StandardError; end
   class WrongNumOfDays < StandardError; end
-  class CannotGetData < StandardError; end
 
   def initialize(location, days)
-    if days > 5
-      puts "最多查询天数为 5"
-      days = 5
-    end
+    raise WrongNumOfDays if days < 0 || days > 5
     @params = {}
     @params['q'] = location
     @params['num_of_days'] = days.to_i
@@ -212,38 +210,38 @@ class Wego
   end
 
   def get
-    uri = URI.parse(APIBaseURL)
+    uri = URI(APIBaseURL)
     uri.query = URI.encode_www_form(@params)
     res = Net::HTTP.get_response(uri)
     @data = JSON.parse(res.body)['data']
-    raise CannotGetData, @data['error'][0]['msg'] if @data['error']
+    raise WrongLocation, @data['error'][0]['msg'] if @data['error']
   end
 
-  def format_current
-    cond = @data['current_condition'][0]
-    format_cond(cond, true).join("\n")
+  def current
+    weather = @data['current_condition'][0]
+    weatherf(weather, true).join("\n")
   end
 
-  def format_day(day)
-    hourly = @data['weather'][day]['hourly']
+  def daily(day)
+    weather = @data['weather'][day]['hourly']
     date = @data['weather'][day]['date']
     "                         ┌────────────┐                         \n" +
     "┌────────────────────────| "+ date +" |─────────────────────────┐\n" +
     "│             白天       └──────┬─────┘       夜间              │\n" +
     "├───────────────────────────────┼───────────────────────────────┤\n" +
-    (0..4).map{|i| "|#{format_cond(hourly[0])[i]}|#{format_cond(hourly[1])[i]}|\n"}.join +
+    (0..4).map{|i| "|#{weatherf(weather[0])[i]}|#{weatherf(weather[1])[i]}|\n"}.join +
     "└───────────────────────────────┴───────────────────────────────┘"
   end
 
   def to_s
     "当前天气信息：#{@data['request'][0]['query'] if @data['request'][0]['type'] == 'City'}\n\n" +
-    "#{format_current}\n" +
-    (0...@params['num_of_days']).map{|i| format_day(i)}.join("\n")
+    "#{current}\n" +
+    (0...@params['num_of_days']).map{|i| daily(i)}.join("\n")
   end
 
   private
 
-    def format_temp(cond, current)
+    def tempf(weather, current)
       def color(temp)
         col = case temp
           when -Float::INFINITY..-16; 21
@@ -270,25 +268,25 @@ class Wego
         end
         "\033[38;5;#{col}m#{temp}\033[0m"
       end
-      tempC = current ? cond['temp_C'] : cond['tempC']
-      temps = [tempC.to_i, cond['FeelsLikeC'].to_i].sort
+      tempC = current ? weather['temp_C'] : weather['tempC']
+      temps = [tempC.to_i, weather['FeelsLikeC'].to_i].sort
       "#{color(temps[0])} - #{color(temps[1])} °C" +
-      (tempC.size + cond['FeelsLikeC'].size < 4 ? "\t\t" : "\t")
+      (tempC.size + weather['FeelsLikeC'].size < 4 ? "\t\t" : "\t")
     end
 
-    def format_rain(cond, current)
+    def rainf(weather, current)
       if current
-        "降水量：#{cond['precipMM']} mm\t"
+        "降水量：#{weather['precipMM']} mm\t"
       else
-        "降水概率：#{cond['chanceofrain']}%\t"
+        "降水概率：#{weather['chanceofrain']}%\t"
       end
     end
 
-    def format_humi(cond)
-      "湿度：#{cond['humidity']}%\t\t"
+    def humif(weather)
+      "湿度：#{weather['humidity']}%\t\t"
     end
 
-    def format_wind(cond)
+    def windf(weather)
       def color(speed)
         col = case speed
           when 1..3; 82
@@ -305,20 +303,20 @@ class Wego
         end
         "\033[38;5;#{col}m#{speed}\033[0m"
       end
-      dir, speed = cond['winddir16Point'], cond['windspeedKmph'].to_i
+      dir, speed = weather['winddir16Point'], weather['windspeedKmph'].to_i
       "#{WindDir[dir]} #{color speed} km/h\t\t"
     end
 
-    def format_cond(cond, current = false)
-      icon = Codes[cond['weatherCode'].to_i]
+    def weatherf(weather, current = false)
+      icon = Codes[weather['weatherCode'].to_i]
       icon ||= IconUnknown
-      desc = cond['lang_zh'][0]['value'] + "\t"
+      desc = weather['lang_zh'][0]['value'] + "\t"
       desc += "\t" if desc.size <= 5
       [ "#{icon[0]}#{desc}",
-        "#{icon[1]}#{format_temp cond, current}",
-        "#{icon[2]}#{format_rain cond, current }",
-        "#{icon[3]}#{format_humi cond}",
-        "#{icon[4]}#{format_wind cond}"
+        "#{icon[1]}#{tempf weather, current}",
+        "#{icon[2]}#{rainf weather, current}",
+        "#{icon[3]}#{humif weather}",
+        "#{icon[4]}#{windf weather}"
       ]
     end
 
@@ -334,10 +332,14 @@ if __FILE__ == $0
         days = arg.to_i
       end
     end
+    if days > 5
+      STDERR.puts "查询天数最大为 5"
+      days = 5
+    end
     if location.nil?
-      print "未指定城市，尝试使用 IP 查询："
-      public_ip = Net::HTTP.get(URI.parse('https://api.ipify.org'))
-      puts public_ip
+      STDERR.print "未指定城市，尝试使用 IP 查询："
+      public_ip = Net::HTTP.get(URI(Wego::IPQueryURL))
+      STDERR.puts public_ip
       wego = Wego.new(public_ip, days)
     else
       wego = Wego.new(location, days)
@@ -345,8 +347,8 @@ if __FILE__ == $0
     wego.get
     puts wego
   rescue SocketError
-    puts "\033[31m错误：请检查网络连接\033[0m"
-  rescue Wego::CannotGetData
-    puts "\033[31m错误：未找到指定的城市或 IP\033[0m"
+    STDERR.puts "\033[31m错误：请检查网络连接\033[0m"
+  rescue Wego::WrongLocation
+    STDERR.puts "\033[31m错误：未找到指定的城市或 IP\033[0m"
   end
 end
