@@ -241,7 +241,7 @@ class Wego
 
   private
 
-    def tempf(weather, current?)
+    def tempf(weather, current)
       def color(temp)
         col = case temp
           when -Float::INFINITY..-16; 21
@@ -268,14 +268,14 @@ class Wego
         end
         "\033[38;5;#{col}m#{temp}\033[0m"
       end
-      tempC = current? ? weather['temp_C'] : weather['tempC']
+      tempC = current ? weather['temp_C'] : weather['tempC']
       temps = [tempC.to_i, weather['FeelsLikeC'].to_i].sort
       "#{color(temps[0])} - #{color(temps[1])} °C" +
       (tempC.size + weather['FeelsLikeC'].size < 4 ? "\t\t" : "\t")
     end
 
-    def rainf(weather, current?)
-      if current?
+    def rainf(weather, current)
+      if current
         "降水量：#{weather['precipMM']} mm\t"
       else
         "降水概率：#{weather['chanceofrain']}%\t"
@@ -307,14 +307,14 @@ class Wego
       "#{WindDir[dir]} #{color speed} km/h\t\t"
     end
 
-    def weatherf(weather, current? = false)
+    def wef(weather, current = false)
       icon = Codes[weather['weatherCode'].to_i]
       icon ||= IconUnknown
       desc = weather['lang_zh'][0]['value'] + "\t"
       desc += "\t" if desc.size <= 5
       [ "#{icon[0]}#{desc}",
-        "#{icon[1]}#{tempf weather, current?}",
-        "#{icon[2]}#{rainf weather, current?}",
+        "#{icon[1]}#{tempf weather, current}",
+        "#{icon[2]}#{rainf weather, current}",
         "#{icon[3]}#{humif weather}",
         "#{icon[4]}#{windf weather}"
       ]
