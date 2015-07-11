@@ -213,6 +213,7 @@ class Wego
     uri = URI(APIBaseURL)
     uri.query = URI.encode_www_form(@params)
     res = Net::HTTP.get_response(uri)
+    # File.open('data.json', 'w') { |f| f.puts res.body }
     @data = JSON.parse(res.body)['data']
     raise WrongLocation, @data['error'][0]['msg'] if @data['error']
   end
@@ -227,7 +228,7 @@ class Wego
     date = @data['weather'][day]['date']
     "                         ┌────────────┐                         \n" +
     "┌────────────────────────┤ "+ date +" ├─────────────────────────┐\n" +
-    "│             白天       └──────┬─────┘       夜间              │\n" +
+    "│             早晨       └──────┬─────┘       夜晚              │\n" +
     "├───────────────────────────────┼───────────────────────────────┤\n" +
     (0..4).map{|i| "│#{wef(weather[0])[i]}│#{wef(weather[1])[i]}│\n"}.join +
     "└───────────────────────────────┴───────────────────────────────┘"
@@ -322,11 +323,11 @@ class Wego
 
 end
 
-if __FILE__ == $0
+if $0 == __FILE__
   begin
     location, days = nil, 2
     ARGV.each do |arg|
-      if arg =~ /[^\d]/
+      if arg =~ /\D/
         location = arg
       else
         days = arg.to_i
